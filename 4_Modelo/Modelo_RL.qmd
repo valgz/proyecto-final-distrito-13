@@ -1,0 +1,149 @@
+---
+title: "Modelo_RL"
+author: "Distrito13"
+format: html
+editor: visual
+---
+
+#### Cargamos el dataset
+
+Este dataset fue generado luego de la exploración de datos:
+
+```{r}
+library(tidyverse)
+df <- read.csv("final_airbnb_out2.csv", header = TRUE, sep = ",", dec = ".")
+```
+
+Visualizamos los primeros valores para ver que esté cargado correctamente:
+
+```{r}
+head(df)
+```
+
+#### Correlacion
+
+Observamos los valores de correlación entre las variables
+
+```{r}
+library(GGally)
+ggpairs(df[,c("Host_Response_Rate", "Host_Total_Listings_Count", "Latitude", "Longitude", "Total_Cost", "Price")],
+lower = list(continuous = wrap("points", alpha = 0.3,size=0.3,color='blue')), cardinality_threshold = 51)
+```
+
+```{r}
+library(GGally)
+ggpairs(df[,c("Bathrooms", "Bedrooms", "Beds", "Number_of_Reviews", "Price")],
+lower = list(continuous = wrap("points", alpha = 0.3,size=0.3,color='blue')), cardinality_threshold = 51)
+```
+
+```{r}
+library(GGally)
+ggpairs(df[,c("Guests_Included", "Security_Deposit", "Review_Scores_Rating", "Accommodates", "Price")],
+lower = list(continuous = wrap("points", alpha = 0.3,size=0.3,color='blue')), cardinality_threshold = 51)
+```
+
+Nombres de las columnas para copiar debajo:
+
+```{r}
+names(df)
+```
+
+#### Division del dataset
+
+Dividimos el dataset en train(70%) y test(30%):
+
+```{r}
+set.seed(123) # Este set.seed hace que a todos nos generen los mismos número aleatorios
+idx <- sample(1:nrow(df), 0.7*nrow(df))
+df_train <- df[idx,]
+df_test <- df[-idx,]
+```
+
+#### Creacion del modelo
+
+Creamos diferentes modelos para ver con cual conseguimos una mejor predicción
+
+Modelo para Price:
+
+```{r}
+model <- lm(df_train, formula = Price~Accommodates+Guests_Included+Beds+Bedrooms)
+summary(model)
+```
+
+Modelo para Total_Cost:
+
+```{r}
+model_Total_Cost <- lm(df_train, formula = Total_Cost~Accommodates+Guests_Included+Beds+Bedrooms)
+summary(model_Total_Cost)
+```
+
+Consideramos que esta predicción no es útil porque estamos utilizando variables que nosotras mismas relacionamos (Security_Deposit, Cleaning_Fee, Price) y no tiene sentido pedir un precio para calcular el precio del alquiler.
+
+Modelo para el precio en escala logarítmica:
+
+```{r}
+model_log <- lm(df_train, formula = log(Price)~Accommodates+Guests_Included+Beds+Bedrooms)
+summary(model_log)
+```
+
+Decidimos continuar trabajando con el modelo para "Price" porque es con el que conseguimos una mayor estimacion:
+
+#### Calculo de las figuras de calidad
+
+Para train:
+
+```{r}
+df_train$est <- predict(model, df_train)
+caret::postResample(pred = df_train$est, obs=df_train$Price)
+```
+
+Para test:
+
+```{r}
+df_test$est <- predict(model, df_test)
+caret::postResample(pred = df_test$est, obs=df_test$Price)
+```
+
+Los valores obtenidos nos indican que nuestro modelo cuenta con la información necesaria para realizar la predicción (RMSE_test\~= RMSE_test o R_train\^2 \~= R_test\^2)
+
+Con un R\^2 de 0,4024 estamos en el rango aceptable aunque se podría mejorar.
+
+#### Evaluación de los residuos
+
+Estos deberían seguir una distribucion normal y estar cercanos al cero.
+
+```{r}
+ggplot(df_train, aes(x=Price, y=Price - est))+
+  geom_point(color='blue', alpha=0.2)+
+  geom_hline(yintercept = 0, color='red')+
+  ggtitle("Residuos en training")
+```
+
+```{r}
+ggplot(df_train, aes(x=Price-est))+geom_histogram(color='red', fill='blue')
+```
+
+```{r}
+ggplot(df_test, aes(x=Price, y=Price - est))+
+  geom_point(color='blue', alpha=0.2)+
+  geom_hline(yintercept = 0, color='red')+
+  ggtitle("Residuos en testing")
+```
+
+```{r}
+ggplot(df_test, aes(x=Price-est))+
+  geom_histogram(color='red', fill='blue')+ 
+  ggtitle("Residuos en testing")
+```
+
+Los valores de los residuos obtenidos nos indican que hay diferencias considerables entre el precio que calculamos y el esperado segun el modelo generado.
+
+#### Conclusion
+
+Podríamos mejorar el modelo y obtener mejores resultados utilizando alguno de los siguientes recursos:
+
+-   Modificación de las variables categóricas por numéricas, separando las variables "Features" y "Amenities" para obtener más información.
+
+-   Codificación de variables categóricas como el Neighborhood, Zipcode y Tipo de propiedad pues se observó en el dashboard de Tableau que el precio, el barrio y el barrio están relacionados.
+
+-   Evaluación de la posibilidad de generar otro tipo de regresión que no sea lineal.
